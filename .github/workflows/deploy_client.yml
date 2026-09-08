@@ -1,1 +1,38 @@
 
+name: Deploy GG.zip to server
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'GG.zip'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy GG.zip to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "GG.zip"
+          target: "/tmp/deploy-upload"
+
+      - name: Extract on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            cd /var/www/html/wbs/
+            unzip -o /tmp/deploy-upload/GG.zip -d .
+            cp /tmp/deploy-upload/GG.zip /var/www/html/wbs/GG.zip
+            rm -f /tmp/deploy-upload/GG.zip
