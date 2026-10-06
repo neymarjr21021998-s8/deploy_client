@@ -1,4 +1,3 @@
-
 name: Deploy GG.zip to server
 
 on:
@@ -24,7 +23,7 @@ jobs:
           source: "GG.zip"
           target: "/tmp/deploy-upload"
 
-      - name: Extract on server
+      - name: Extract on server + bump cache version
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -32,7 +31,25 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
+            set -e
             cd /var/www/html/wbs/
-            unzip -o /tmp/deploy-upload/GG.zip -d .
-            cp /tmp/deploy-upload/GG.zip /var/www/html/wbs/GG.zip
+
+            # 1) Giải nén gói mới, KHÔNG ghi đè launcher (index.html) và sw.js ở thư mục gốc
+            unzip -o /tmp/deploy-upload/GG.zip -d . -x index.html sw.js
+
+            # 2) Thay file zip theo kiểu nguyên tử (copy ra file tạm rồi mv)
+            cp /tmp/deploy-upload/GG.zip GG.zip.tmp
+            mv -f GG.zip.tmp GG.zip
             rm -f /tmp/deploy-upload/GG.zip
+
+            # 3) Đổi version cache ở CẢ HAI file thành cùng một giá trị mới
+            VER="gunslinger-cache-r${{ github.run_number }}-$(date +%Y%m%d%H%M%S)"
+            sed -i -E "s/(var[[:space:]]+CACHE[[:space:]]*=[[:space:]]*\")[^\"]*\"/\1${VER}\"/" index.html sw.js
+
+            # 4) Kiểm tra đã thay thành công, nếu không thì báo lỗi cho workflow
+            if grep -q "\"${VER}\"" index.html && grep -q "\"${VER}\"" sw.js; then
+              echo "Cache version -> ${VER}"
+            else
+              echo "LỖI: không tìm thấy dòng 'var CACHE = \"...\"' trong index.html hoặc sw.js"
+              exit 1
+            fi
