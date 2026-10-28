@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'GG.zip'
+  # Cho phép bấm chạy tay ở tab Actions: deploy lại GG.zip đang có trên main mà không cần đổi file
+  # (ví dụ sau khi sửa script deploy, hoặc khi lần chạy trước fail vì mạng/sai secret).
+  workflow_dispatch:
 
 jobs:
   deploy:
