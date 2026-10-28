@@ -37,19 +37,42 @@ jobs:
             # 1) Giải nén gói mới, KHÔNG ghi đè launcher (index.html) và sw.js ở thư mục gốc
             unzip -o /tmp/deploy-upload/GG.zip -d . -x index.html sw.js
 
-            # 2) Thay file zip theo kiểu nguyên tử (copy ra file tạm rồi mv)
+            # 2) Sinh game.html = index.html của build Cocos trong zip (launcher fetch GAME_URL="game.html").
+            #    BẮT BUỘC mỗi build: tên asset có hash nội dung nên game.html cũ sẽ trỏ vào build cũ,
+            #    mà unzip -o không xoá file cũ ⇒ game vẫn chạy nhưng là bản cũ, trông như "cache không làm mới".
+            unzip -p /tmp/deploy-upload/GG.zip index.html > game.html.tmp
+            test -s game.html.tmp
+            grep -q '<script[[:space:]>]' game.html.tmp
+            mv -f game.html.tmp game.html
+
+            # 3) Guard: script chính mà game.html trỏ tới phải thực sự có trên server sau khi giải nén
+            MAIN_JS=$(grep -oE 'main\.[0-9a-f]+\.js' game.html | head -n1)
+            if [ -z "$MAIN_JS" ] || [ ! -f "$MAIN_JS" ]; then
+              echo "LỖI: game.html trỏ tới '${MAIN_JS:-<không tìm thấy>}' nhưng file không có trên server"
+              exit 1
+            fi
+            echo "game.html -> $MAIN_JS"
+
+            # 4) Thay file zip theo kiểu nguyên tử (copy ra file tạm rồi mv)
             cp /tmp/deploy-upload/GG.zip GG.zip.tmp
             mv -f GG.zip.tmp GG.zip
             rm -f /tmp/deploy-upload/GG.zip
 
-            # 3) Đổi version cache ở CẢ HAI file thành cùng một giá trị mới
-            VER="gunslinger-cache-r${{ github.run_number }}-$(date +%Y%m%d%H%M%S)"
-            sed -i -E "s/(var[[:space:]]+CACHE[[:space:]]*=[[:space:]]*\")[^\"]*\"/\1${VER}\"/" index.html sw.js
+            # 5) sw.js lấy tên cache từ query ?v= của URL đăng ký, nên CHỈ index.html khai báo CACHE.
+            #    Guard: nếu sw.js bị sửa về kiểu cũ (tự khai báo CACHE) thì dừng, vì khi đó 2 file sẽ lệch tên.
+            if ! grep -q 'searchParams.get("v")' sw.js; then
+              echo "LỖI: sw.js không còn lấy CACHE từ ?v= -> phải bump CACHE trong sw.js nữa, cập nhật lại workflow"
+              exit 1
+            fi
 
-            # 4) Kiểm tra đã thay thành công, nếu không thì báo lỗi cho workflow
-            if grep -q "\"${VER}\"" index.html && grep -q "\"${VER}\"" sw.js; then
+            # 6) Đổi version cache ở index.html (sw.js tự ăn theo qua register("sw.js?v=" + CACHE))
+            VER="gunslinger-cache-r${{ github.run_number }}-$(date +%Y%m%d%H%M%S)"
+            sed -i -E "s/(var[[:space:]]+CACHE[[:space:]]*=[[:space:]]*\")[^\"]*\"/\1${VER}\"/" index.html
+
+            # 7) Kiểm tra đã thay thành công, nếu không thì báo lỗi cho workflow
+            if grep -q "\"${VER}\"" index.html; then
               echo "Cache version -> ${VER}"
             else
-              echo "LỖI: không tìm thấy dòng 'var CACHE = \"...\"' trong index.html hoặc sw.js"
+              echo "LỖI: không tìm thấy dòng 'var CACHE = \"...\"' trong index.html"
               exit 1
             fi
