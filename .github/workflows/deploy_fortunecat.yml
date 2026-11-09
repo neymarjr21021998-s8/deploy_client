@@ -1,0 +1,25 @@
+name: Deploy FC.zip to server
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'FC.zip'
+  # Cho phép bấm chạy tay ở tab Actions: deploy lại FC.zip đang có trên main mà không cần đổi file
+  # (ví dụ sau khi sửa script deploy, hoặc khi lần chạy trước fail vì mạng/sai secret).
+  workflow_dispatch:
+
+# Hai lần push liên tiếp cùng dự án sẽ xếp hàng chứ không chạy chồng lên nhau.
+# cancel-in-progress: false vì huỷ giữa lúc unzip sẽ để thư mục ở trạng thái nửa vời.
+concurrency:
+  group: deploy-fortunecat
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-zip.yml
+    with:
+      zip_name: FC.zip
+      target_dir: /var/www/html/fortunecat
+      cache_prefix: fortunecat-cache
+    secrets: inherit
